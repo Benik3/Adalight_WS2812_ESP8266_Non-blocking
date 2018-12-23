@@ -1,3 +1,5 @@
+//Adalight on ESP8266 with NeoPixelBus library and Uart method for non blocking render of WS2812 and similar.
+
 #include <NeoPixelBus.h>
 
 const uint16_t PixelCount = 110;  //number of leds
@@ -15,7 +17,7 @@ NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(PixelCount, PixelP
 
 void setup()
 {
-  Serial.begin(921600);
+  Serial.begin(500000); //Too high baudrate can cause overflow of UART FIFO while LED rendering (strip.Show). Max BaudRate you can get by 93392070/LED number.
   strip.Begin();
   strip.Show();
 
