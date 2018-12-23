@@ -17,7 +17,9 @@ NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(PixelCount, PixelP
 
 void setup()
 {
-  Serial.begin(500000); //Too high baudrate can cause overflow of UART FIFO while LED rendering (strip.Show). Max BaudRate you can get by 93392070/LED number.
+  //Too high baudrate can cause overflow of UART FIFO while LED rendering (strip.Show) if next frame come directly after previous. Max BaudRate you can get by 93392070/LED number.
+  //In real usage these frames are pretty unique and even higher Baudrates works well. This is just the safest speed.
+  Serial.begin(500000);
   strip.Begin();
   strip.Show();
 
