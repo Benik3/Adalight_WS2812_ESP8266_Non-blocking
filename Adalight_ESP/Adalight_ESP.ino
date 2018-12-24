@@ -2,7 +2,9 @@
 
 #include <NeoPixelBus.h>
 
-const uint16_t PixelCount = 110;  //number of leds
+#define PixelCount 110      //number of leds
+#define SERIAL_RX_BUFF ((PixelCount * 3) + 6) * 3 //Set higher UART buffer to prevent overflow, this will set buffer to 3x size of the frame
+
 const uint16_t PixelPin = 4;  //must be D4 (GPIO2) for ESP8266 Uart Method
 
 //gamma 2.2 calibration curve
@@ -12,14 +14,15 @@ const uint8_t g22[] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 
 const uint8_t prefix[] = {'A', 'd', 'a'};
 uint8_t hi, lo, chk;
 
-NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(PixelCount, PixelPin);
-//NeoPixelBus<NeoGrbFeature, NeoEsp8266UartWs2813Method> strip(PixelCount, PixelPin);
+NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart1800KbpsMethod> strip(PixelCount, PixelPin);
+//NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart1Ws2813Method> strip(PixelCount, PixelPin);
 
 void setup()
 {
-  //Too high baudrate can cause overflow of UART FIFO while LED rendering (strip.Show) if next frame come directly after previous. Max BaudRate you can get by 93392070/LED number.
-  //In real usage these frames are pretty unique and even higher Baudrates works well. This is just the safest speed.
+  //Too high baudrate can cause overflow of UART FIFO while LED rendering (strip.Show) if next frame come directly after previous.
+  //In real usage these frames are pretty unique and even higher Baudrates works well.
   Serial.begin(500000);
+  Serial.setRxBufferSize(SERIAL_RX_BUFF);
   strip.Begin();
   strip.Show();
 
