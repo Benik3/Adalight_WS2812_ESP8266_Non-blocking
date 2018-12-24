@@ -1,11 +1,17 @@
 //Adalight on ESP8266 with NeoPixelBus library and Uart method for non blocking render of WS2812 and similar.
+//You can define smoothing of the frames with variable SMOOTH
 
 #include <NeoPixelBus.h>
 
 #define PixelCount 110      //number of leds
-#define SERIAL_RX_BUFF ((PixelCount * 3) + 6) * 3 //Set higher UART buffer to prevent overflow, this will set buffer to 3x size of the frame
+#define PixelPin 4          //must be D4 (GPIO2) for ESP8266 Uart Method
+#define SERIAL_RX_BUFF ((PixelCount * 3) + 6) * 3 //Set higher UART buffer to prevent overflow, this will set buffer to 3x size of the frame, I recommend to double it for smoothing
+#define SMOOTH 0         //number of interpolations, one interpolation takes about 6ms (4,5ms with 160MHz CPU freq), 0 = no smoothing
 
-const uint16_t PixelPin = 4;  //must be D4 (GPIO2) for ESP8266 Uart Method
+#if SMOOTH
+HsbColor startBuff[PixelCount], currentBuff[PixelCount], endBuff[PixelCount];
+float progress;
+#endif
 
 //gamma 2.2 calibration curve
 const uint8_t g22[] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 26, 27, 28, 28, 29, 30, 30, 31, 32, 32, 33, 34, 34, 35, 36, 37, 37, 38, 39, 40, 40, 41, 42, 43, 44, 45, 45, 46, 47, 48, 49, 50, 51, 52, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 68, 69, 70, 71, 72, 73, 74, 76, 77, 78, 79, 80, 81, 83, 84, 85, 86, 87, 89, 90, 91, 92, 93, 95, 96, 97, 98, 99, 101, 102, 103, 105, 106, 107, 109, 110, 111, 113, 114, 116, 117, 119, 120, 122, 123, 125, 126, 128, 129, 131, 132, 134, 135, 137, 139, 140, 142, 143, 145, 147, 148, 150, 152, 153, 155, 157, 159, 160, 162, 164, 165, 167, 169, 170, 172, 174, 176, 177, 179, 181, 183, 185, 187, 189, 191, 193, 195, 196, 198, 200, 202, 204, 206, 208, 210, 212, 214, 216, 218, 220, 222, 224, 226, 228, 230, 232, 234, 236, 238, 240, 242, 244, 246, 249, 251, 253, 255};
@@ -19,24 +25,24 @@ NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart1800KbpsMethod> strip(PixelCount, Pixel
 
 void setup()
 {
-  //Too high baudrate can cause overflow of UART FIFO while LED rendering (strip.Show) if next frame come directly after previous.
-  //In real usage these frames are pretty unique and even higher Baudrates works well.
+  //Too high baudrate can cause overflow of UART FIFO while LED rendering (strip.Show) if next frame comes directly after the previous one or you have too fast grabbing while using smoothing.
   Serial.begin(500000);
   Serial.setRxBufferSize(SERIAL_RX_BUFF);
+  
   strip.Begin();
   strip.Show();
 
   //Initial testing flash
-  strip.ClearTo(RgbColor(255,0,0));
+  strip.ClearTo(RgbColor(255, 0, 0));
   strip.Show();
   delay(500);
-  strip.ClearTo(RgbColor(0,255,0));
+  strip.ClearTo(RgbColor(0, 255, 0));
   strip.Show();
   delay(500);
-  strip.ClearTo(RgbColor(0,0,255));
+  strip.ClearTo(RgbColor(0, 0, 255));
   strip.Show();
   delay(500);
-  strip.ClearTo(RgbColor(0,0,0));
+  strip.ClearTo(RgbColor(0, 0, 0));
   strip.Show();
 
   Serial.print("Ada\n"); // Send "Magic Word" string to host
@@ -44,7 +50,7 @@ void setup()
 
 void loop()
 {
-  // wait for first byte of Magic Word
+  // wait for the first byte of Magic Word
   for (int i = 0; i < sizeof prefix; ++i) {
     while (!Serial.available()) ;;
     // Check next byte in Magic Word
@@ -61,6 +67,51 @@ void loop()
   while (!Serial.available()) ;;
   chk = Serial.read();
 
+#if SMOOTH
+  if (chk == (hi ^ lo ^ 0x55))
+  {
+    memcpy(startBuff, currentBuff, sizeof(currentBuff));  //copy actual frame as starting point of smoothing
+    progress = 1.0 / SMOOTH;
+    for (uint8_t i = 0; i < PixelCount; i++) {
+      RgbColor color;
+      while (!Serial.available());
+      color.R = Serial.read();
+      while (!Serial.available());
+      color.G = Serial.read();
+      while (!Serial.available());
+      color.B = Serial.read();
+      endBuff[i] = HsbColor(color);
+    }
+  }
+
+  do //do smoothing until new frame come or smoothing is finished
+  {
+    for (uint8_t i = 0; i < PixelCount; i++)
+    {
+      HsbColor color = HsbColor::LinearBlend<NeoHueBlendShortestDistance>(startBuff[i], endBuff[i], progress);
+      currentBuff[i] = color;
+
+      RgbColor colorRgb = (RgbColor) color;
+      colorRgb.R = g22[colorRgb.R];
+      colorRgb.G = g22[colorRgb.G];
+      colorRgb.B = g22[colorRgb.B];
+      strip.SetPixelColor(i, colorRgb);
+    }
+    strip.Show();
+
+    if (progress >= 1.0) //smoothing complete, we can stop now
+    {
+      progress = 1.0 / SMOOTH;
+      break;
+    }
+    else
+    {
+      progress = progress + (1.0 / SMOOTH);
+      if (progress > 1.0) progress = 1.0;
+    }
+  } while (Serial.available() < PixelCount);
+
+#else
   if (chk == (hi ^ lo ^ 0x55))
   {
     for (uint8_t i = 0; i < PixelCount; i++) {
@@ -75,5 +126,6 @@ void loop()
     }
     strip.Show();
   }
+#endif
 
 }
