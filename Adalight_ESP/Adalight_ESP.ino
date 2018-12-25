@@ -5,11 +5,11 @@
 
 #define PixelCount 110      //number of leds
 #define PixelPin 4          //must be D4 (GPIO2) for ESP8266 Uart Method
-#define SERIAL_RX_BUFF ((PixelCount * 3) + 6) * 3 //Set higher UART buffer to prevent overflow, this will set buffer to 3x size of the frame, I recommend to double it for smoothing
-#define SMOOTH 0         //number of interpolations, one interpolation takes about 6ms (4,5ms with 160MHz CPU freq), 0 = no smoothing
+#define SERIAL_RX_BUFF ((PixelCount * 3) + 6) * 3 //Set higher UART buffer to prevent overflow, this will set buffer to 3x size of the frame
+#define SMOOTH 0        //number of interpolations, one interpolation takes about 4ms, 0 = no smoothing
 
 #if SMOOTH
-HsbColor startBuff[PixelCount], currentBuff[PixelCount], endBuff[PixelCount];
+RgbColor startBuff[PixelCount], currentBuff[PixelCount], endBuff[PixelCount];
 float progress;
 #endif
 
@@ -25,10 +25,10 @@ NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart1800KbpsMethod> strip(PixelCount, Pixel
 
 void setup()
 {
-  //Too high baudrate can cause overflow of UART FIFO while LED rendering (strip.Show) if next frame comes directly after the previous one or you have too fast grabbing while using smoothing.
+  //tested up to 2 000 000Bd with the preset size of Serial buffer, but I recommend to use 500000-921600Bd
   Serial.begin(500000);
   Serial.setRxBufferSize(SERIAL_RX_BUFF);
-  
+
   strip.Begin();
   strip.Show();
 
@@ -54,10 +54,11 @@ void loop()
   for (int i = 0; i < sizeof prefix; ++i) {
     while (!Serial.available()) ;;
     // Check next byte in Magic Word
-    if (prefix[i] != Serial.read())
+    if (prefix[i] != Serial.read()){
       i = 0;
+    }
   }
-
+  
   // Hi, Lo, Checksum
 
   while (!Serial.available()) ;;
@@ -73,14 +74,12 @@ void loop()
     memcpy(startBuff, currentBuff, sizeof(currentBuff));  //copy actual frame as starting point of smoothing
     progress = 1.0 / SMOOTH;
     for (uint8_t i = 0; i < PixelCount; i++) {
-      RgbColor color;
       while (!Serial.available());
-      color.R = Serial.read();
+      endBuff[i].R = Serial.read();
       while (!Serial.available());
-      color.G = Serial.read();
+      endBuff[i].G = Serial.read();
       while (!Serial.available());
-      color.B = Serial.read();
-      endBuff[i] = HsbColor(color);
+      endBuff[i].B = Serial.read();
     }
   }
 
@@ -88,14 +87,13 @@ void loop()
   {
     for (uint8_t i = 0; i < PixelCount; i++)
     {
-      HsbColor color = HsbColor::LinearBlend<NeoHueBlendShortestDistance>(startBuff[i], endBuff[i], progress);
+      RgbColor color = RgbColor::LinearBlend(startBuff[i], endBuff[i], progress);
       currentBuff[i] = color;
 
-      RgbColor colorRgb = (RgbColor) color;
-      colorRgb.R = g22[colorRgb.R];
-      colorRgb.G = g22[colorRgb.G];
-      colorRgb.B = g22[colorRgb.B];
-      strip.SetPixelColor(i, colorRgb);
+      color.R = g22[color.R];
+      color.G = g22[color.G];
+      color.B = g22[color.B];
+      strip.SetPixelColor(i, color);
     }
     strip.Show();
 
