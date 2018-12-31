@@ -54,11 +54,11 @@ void loop()
   for (int i = 0; i < sizeof prefix; ++i) {
     while (!Serial.available()) ;;
     // Check next byte in Magic Word
-    if (prefix[i] != Serial.read()){
+    if (prefix[i] != Serial.read()) {
       i = 0;
     }
   }
-  
+
   // Hi, Lo, Checksum
 
   while (!Serial.available()) ;;
@@ -68,62 +68,65 @@ void loop()
   while (!Serial.available()) ;;
   chk = Serial.read();
 
-#if SMOOTH
+
   if (chk == (hi ^ lo ^ 0x55))
   {
-    memcpy(startBuff, currentBuff, sizeof(currentBuff));  //copy actual frame as starting point of smoothing
-    progress = 1.0 / SMOOTH;
-    for (uint8_t i = 0; i < PixelCount; i++) {
-      while (!Serial.available());
-      endBuff[i].R = Serial.read();
-      while (!Serial.available());
-      endBuff[i].G = Serial.read();
-      while (!Serial.available());
-      endBuff[i].B = Serial.read();
-    }
-  }
-
-  do //do smoothing until new frame come or smoothing is finished
-  {
-    for (uint8_t i = 0; i < PixelCount; i++)
+    if (((hi << 8) | lo) + 1 == PixelCount)   //if number of LED in message doesn't match defined PixelCount, whole strip is set to Red
     {
-      RgbColor color = RgbColor::LinearBlend(startBuff[i], endBuff[i], progress);
-      currentBuff[i] = color;
-
-      color.R = g22[color.R];
-      color.G = g22[color.G];
-      color.B = g22[color.B];
-      strip.SetPixelColor(i, color);
-    }
-    strip.Show();
-
-    if (progress >= 1.0) //smoothing complete, we can stop now
-    {
+#if SMOOTH
+      memcpy(startBuff, currentBuff, sizeof(currentBuff));  //copy actual frame as starting point of smoothing
       progress = 1.0 / SMOOTH;
-      break;
+      for (uint8_t i = 0; i < PixelCount; i++) {
+        while (!Serial.available());
+        endBuff[i].R = Serial.read();
+        while (!Serial.available());
+        endBuff[i].G = Serial.read();
+        while (!Serial.available());
+        endBuff[i].B = Serial.read();
+      }
+      do //do smoothing until new frame come or smoothing is finished
+      {
+        for (uint8_t i = 0; i < PixelCount; i++)
+        {
+          RgbColor color = RgbColor::LinearBlend(startBuff[i], endBuff[i], progress);
+          currentBuff[i] = color;
+
+          color.R = g22[color.R];
+          color.G = g22[color.G];
+          color.B = g22[color.B];
+          strip.SetPixelColor(i, color);
+        }
+        strip.Show();
+
+        if (progress >= 1.0) //smoothing complete, we can stop now
+        {
+          progress = 1.0 / SMOOTH;
+          break;
+        }
+        else
+        {
+          progress = progress + (1.0 / SMOOTH);
+          if (progress > 1.0) progress = 1.0;
+        }
+      } while (Serial.available() < PixelCount);
+#else
+      for (uint8_t i = 0; i < PixelCount; i++) {
+        RgbColor color;
+        while (!Serial.available());
+        color.R = g22[Serial.read()];
+        while (!Serial.available());
+        color.G = g22[Serial.read()];
+        while (!Serial.available());
+        color.B = g22[Serial.read()];
+        strip.SetPixelColor(i, color);
+      }
+      strip.Show();
+#endif
     }
     else
     {
-      progress = progress + (1.0 / SMOOTH);
-      if (progress > 1.0) progress = 1.0;
+      strip.ClearTo(RgbColor(255, 0, 0));
+      strip.Show();
     }
-  } while (Serial.available() < PixelCount);
-
-#else
-  if (chk == (hi ^ lo ^ 0x55))
-  {
-    for (uint8_t i = 0; i < PixelCount; i++) {
-      RgbColor color;
-      while (!Serial.available());
-      color.R = g22[Serial.read()];
-      while (!Serial.available());
-      color.G = g22[Serial.read()];
-      while (!Serial.available());
-      color.B = g22[Serial.read()];
-      strip.SetPixelColor(i, color);
-    }
-    strip.Show();
   }
-#endif
-
 }
