@@ -6,7 +6,7 @@
 #define PixelCount 110      //number of leds
 #define PixelPin 4          //must be D4 (GPIO2) for ESP8266 Uart Method
 #define SERIAL_RX_BUFF ((PixelCount * 3) + 6) * 3 //Set higher UART buffer to prevent overflow, this will set buffer to 3x size of the frame
-#define SMOOTH 0        //number of interpolations, one interpolation takes about 4ms, 0 = no smoothing
+#define SMOOTH 0        //number of interpolations for smoothing, one interpolation takes around (PixelCount * 30us) + 700us, 0 = no smoothing
 
 #if SMOOTH
 RgbColor startBuff[PixelCount], currentBuff[PixelCount], endBuff[PixelCount];
@@ -20,8 +20,7 @@ const uint8_t g22[] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 
 const uint8_t prefix[] = {'A', 'd', 'a'};
 uint8_t hi, lo, chk;
 
-NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart1800KbpsMethod> strip(PixelCount, PixelPin);
-//NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart1Ws2813Method> strip(PixelCount, PixelPin);
+NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart1Ws2812xMethod> strip(PixelCount, PixelPin);
 
 void setup()
 {
