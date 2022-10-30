@@ -17,3 +17,6 @@ Here is nice diagram from [todbot.com](https://todbot.com/blog/2017/01/12/crashs
 
 You can use any diode with current at least 100mA and voltage drop 0,5V - 1V (even 0,3V should work but it's on the edge). E.g. 1N4148, 1N400x... 
 The problem may not appear always. I tested here one WS2812 and one WS2813 strip, both works OK directly from ESP.
+
+Highly integrated solution using SMD diod on WS2813 strip  
+![SMD diode usage](SMD_diode_example.jpg)
